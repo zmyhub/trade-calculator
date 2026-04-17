@@ -39,35 +39,51 @@ jobs:
           mkdir -p $SDK_DIR/tools/bin
           ln -sf $SDK_DIR/cmdline-tools/latest/bin/sdkmanager $SDK_DIR/tools/bin/sdkmanager
 
-      - name: Fix autoconf 2.71 libffi issue
-        run: |
-          # Downgrade autoconf to 2.69 from source (Ubuntu 24.04 has 2.71 which removed LT_SYS_SYMBOL_USCORE)
-          cd /tmp
-          wget -q https://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.gz
-          tar xf autoconf-2.69.tar.gz
-          cd autoconf-2.69
-          ./configure --prefix=/usr/local > /dev/null 2>&1
-          make -j$(nproc) > /dev/null 2>&1
-          sudo make install > /dev/null 2>&1
-          sudo ln -sf /usr/local/bin/autoconf /usr/bin/autoconf269
-          sudo ln -sf /usr/local/bin/automake /usr/bin/automake169
-          sudo ln -sf /usr/local/bin/aclocal /usr/bin/aclocal169
-          echo "autoconf 2.69 installed"
-
       - name: Install p4a + buildozer
         run: |
           pip install cython==0.29.34 setuptools
           pip install git+https://github.com/kivy/python-for-android.git@master
           pip install buildozer
 
+      - name: Patch libffi configure.ac for autoconf 2.71 compat
+        run: |
+          P4A_SITE=$(python3 -c "import site; print(site.getsitepackages()[0])")
+          LIBFFI_DIR=$(find $P4A_SITE -path "*/pythonforandroid/recipes/libffi/*" -name "configure.ac" 2>/dev/null | head -1)
+          echo "Found libffi configure.ac at: $LIBFFI_DIR"
+          if [ -n "$LIBFFI_DIR" ] && [ -f "$LIBFFI_DIR" ]; then
+            # On Ubuntu 24.04 with autoconf 2.71, LT_SYS_SYMBOL_USCORE macro was removed.
+            # It is referenced but never defined in the libffi configure.ac.
+            # Add a stub definition before the first usage.
+            python3 -c "
+import re
+path = '$LIBFFI_DIR'
+with open(path) as f:
+    content = f.read()
+stub = '''
+dnl Stub for autoconf 2.71 compatibility (macro removed in 2.71)
+AC_DEFUN([LT_SYS_SYMBOL_USCORE],[AC_DEFINE([LT_SYS_SYMBOL_USCORE],[1])])
+'''
+if 'LT_SYS_SYMBOL_USCORE' in content and 'AC_DEFUN([LT_SYS_SYMBOL_USCORE]' not in content:
+    # Insert stub right after first AC_INIT
+    content = re.sub(r'(AC_INIT\([^)]+\))', r'\1\n' + stub.strip(), content, count=1)
+    with open(path, 'w') as f:
+        f.write(content)
+    print('Patched OK')
+else:
+    print('Already patched or no LT_SYS_SYMBOL_USCORE found')
+"
+          else
+            echo "libffi configure.ac not found in $P4A_SITE"
+            find $P4A_SITE -name "configure.ac" 2>/dev/null | head -10
+            exit 1
+          fi
+
       - name: Build APK
         run: |
           export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
           export ANDROID_SDK_ROOT=$ANDROID_HOME
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin:$PATH
-          export PATH=/usr/local/bin:$PATH
-          # Use autoconf 2.69 for autoreconf
-          sh -c 'export PATH=/usr/local/bin:$PATH; export AUTOCONF=/usr/local/bin/autoconf; buildozer android debug'
+          buildozer android debug
         env:
           BUILDZER_SKIP_ROOT_CHECK: '1'
 
