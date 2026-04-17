@@ -21,16 +21,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt update
-          sudo apt install -y python3-pip openjdk-17-jdk-headless git zip unzip wget libtool-bin
-
-          # Downgrade autoconf from 2.71 to 2.69 (Ubuntu 24.04 ships 2.71 which removed LT_SYS_SYMBOL_USCORE macro needed by libffi recipes)
-          cd /tmp
-          wget -q https://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.gz
-          tar -xzf autoconf-2.69.tar.gz
-          cd autoconf-2.69
-          ./configure --prefix=/usr > /dev/null 2>&1
-          make -j$(nproc) > /dev/null 2>&1
-          sudo make install > /dev/null 2>&1
+          sudo apt install -y python3-pip openjdk-17-jdk-headless git zip unzip wget
 
       - name: Download and install Android SDK
         run: |
@@ -53,14 +44,13 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install buildozer cython setuptools
+          pip install buildozer==1.4.0 pythonforandroid==2023.06.26 cython==0.29.34
 
       - name: Build APK
         run: |
           export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
           export ANDROID_SDK_ROOT=$ANDROID_HOME
-          export PATH=/usr/bin:$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin
-          export ACLOCAL_FLAGS="-I /usr/share/aclocal"
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin:$PATH
           buildozer android debug
         env:
           BUILDZER_SKIP_ROOT_CHECK: '1'
