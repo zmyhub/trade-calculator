@@ -21,7 +21,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt update
-          sudo apt install -y python3-pip openjdk-17-jdk-headless git zip unzip wget libtool automake aclocal
+          sudo apt install -y python3-pip openjdk-17-jdk-headless git zip unzip wget libtool automake
 
       - name: Download and install Android SDK
         run: |
@@ -51,13 +51,10 @@ jobs:
           export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
           export ANDROID_SDK_ROOT=$ANDROID_HOME
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin:$PATH
-          export ACLOCAL="aclocal --install"
           export ACLOCAL_FLAGS="-I /usr/share/aclocal"
-          autoreconf -fi 2>&1 || true
           buildozer android debug
         env:
           BUILDZER_SKIP_ROOT_CHECK: '1'
-          AUTOPROXY_ALWAYS: '1'
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
