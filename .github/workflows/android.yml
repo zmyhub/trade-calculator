@@ -9,11 +9,6 @@ jobs:
   build:
     runs-on: ubuntu-22.04
 
-    env:
-      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
-      ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
-      ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,30 +21,42 @@ jobs:
       - name: Install system deps
         run: |
           sudo apt update
-          sudo apt install -y python3-pip openjdk-17-jdk-headless git zip unzip wget \
+          sudo apt install -y openjdk-17-jdk-headless git zip unzip wget \
             autoconf automake libtool libtool-bin pkg-config zlib1g-dev libncurses5-dev
           sudo update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java
           sudo update-alternatives --set javac /usr/lib/jvm/java-17-openjdk-amd64/bin/javac
           java -version
 
-      - name: Install Android SDK
+      - name: Download Android SDK command line tools
         run: |
-          export PATH=$JAVA_HOME/bin:$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
-          sdkmanager --version
-          SDK_DIR=$ANDROID_HOME
+          SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
           mkdir -p $SDK_DIR/cmdline-tools
           cd $SDK_DIR/cmdline-tools
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
           unzip -q cmdline-tools.zip
           mv cmdline-tools latest
           rm cmdline-tools.zip
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "build-tools;34.0.0" "platforms;android-34" "platform-tools"
+          echo "SDK downloaded to $SDK_DIR"
+
+      - name: Accept Android SDK licenses
+        run: |
+          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+          export PATH=$JAVA_HOME/bin:$PATH
+          SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
+          yes | $SDK_DIR/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
+
+      - name: Install Android SDK components
+        run: |
+          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+          export PATH=$JAVA_HOME/bin:$PATH
+          SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
+          $SDK_DIR/cmdline-tools/latest/bin/sdkmanager "build-tools;34.0.0" "platforms;android-34" "platform-tools"
           mkdir -p $SDK_DIR/tools/bin
           ln -sf $SDK_DIR/cmdline-tools/latest/bin/sdkmanager $SDK_DIR/tools/bin/sdkmanager
 
       - name: Install p4a + buildozer
         run: |
+          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
           export PATH=$JAVA_HOME/bin:$PATH
           pip install cython==0.29.34 setuptools wheel
           pip install git+https://github.com/kivy/python-for-android.git@v2024.01.21
@@ -57,6 +64,9 @@ jobs:
 
       - name: Build APK
         run: |
+          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+          export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
+          export ANDROID_SDK_ROOT=$ANDROID_HOME
           export PATH=$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin:$PATH
           buildozer android debug
         env:
