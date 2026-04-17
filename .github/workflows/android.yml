@@ -33,7 +33,6 @@ jobs:
           sudo make install > /dev/null 2>&1
           sudo ln -sf /usr/local/bin/autoconf /usr/local/bin/autoreconf
           export PATH=/usr/local/bin:$PATH
-          cd /root
 
       - name: Download and install Android SDK
         run: |
