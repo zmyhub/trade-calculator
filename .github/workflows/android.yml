@@ -7,72 +7,28 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+
+    container:
+      image: mendable/android-kivy-builder:latest
+      options: --privileged
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install system dependencies
+      - name: Install system deps
         run: |
-          sudo apt update
-          sudo apt install -y python3-pip openjdk-17-jdk-headless git zip unzip wget autoconf automake libtool
+          apt-get update
+          apt-get install -y python3-pip git zip unzip wget openjdk-17-jdk-headless
 
-      - name: Download and install Android SDK
+      - name: Install Buildozer + p4a
         run: |
-          SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
-          mkdir -p $SDK_DIR/cmdline-tools
-          cd $SDK_DIR/cmdline-tools
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
-          unzip -q cmdline-tools.zip
-          mv cmdline-tools latest
-          rm cmdline-tools.zip
-          export PATH=$PATH:$SDK_DIR/cmdline-tools/latest/bin
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "build-tools;34.0.0" "platforms;android-34" "platform-tools"
-          mkdir -p $SDK_DIR/tools/bin
-          ln -sf $SDK_DIR/cmdline-tools/latest/bin/sdkmanager $SDK_DIR/tools/bin/sdkmanager
-
-      - name: Install Python dependencies
-        run: |
-          pip install git+https://github.com/kivy/python-for-android.git@v2023.05.21 cython==0.29.34 setuptools
-          pip install buildozer
-
-      - name: Patch libffi configure.ac for autoconf 2.71 compat
-        run: |
-          P4A_SITE=$(/opt/hostedtoolcache/Python/3.10.20/x64/bin/python3 -c "import site; print(site.getsitepackages()[0])")
-          LIBFFI_DIR=$(find $P4A_SITE -name "libffi" -type d | grep recipes | head -1)
-          echo "Found: $LIBFFI_DIR"
-          if [ -z "$LIBFFI_DIR" ] || [ ! -f "$LIBFFI_DIR/configure.ac" ]; then
-            echo "libffi configure.ac not found"
-            find $P4A_SITE -name "configure.ac" 2>/dev/null | head -10
-            exit 1
-          fi
-          python3 -c "
-import re, sys
-path = '$LIBFFI_DIR/configure.ac'
-with open(path) as f:
-    content = f.read()
-stub = 'AC_DEFUN([LT_SYS_SYMBOL_USCORE],[uscore=yes])\n'
-if 'LT_SYS_SYMBOL_USCORE' in content and 'AC_DEFUN([LT_SYS_SYMBOL_USCORE]' not in content:
-    content = re.sub(r'^LT_SYS_SYMBOL_USCORE', stub.strip(), content, flags=re.MULTILINE)
-    with open(path, 'w') as f:
-        f.write(content)
-    print('Patched OK')
-else:
-    print('Already patched or no match')
-"
+          pip install buildozer cython==0.29.34
+          pip install git+https://github.com/kivy/python-for-android.git@master
 
       - name: Build APK
         run: |
-          export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
-          export ANDROID_SDK_ROOT=$ANDROID_HOME
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin:$PATH
           buildozer android debug
         env:
           BUILDZER_SKIP_ROOT_CHECK: '1'
