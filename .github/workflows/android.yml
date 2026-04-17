@@ -25,23 +25,18 @@ jobs:
 
       - name: Download and install Android SDK command line tools
         run: |
-          mkdir -p $HOME/android-sdk/cmdline-tools
-          cd $HOME/android-sdk/cmdline-tools
+          mkdir -p $HOME/.buildozer/android/platform/android-sdk/cmdline-tools
+          cd $HOME/.buildozer/android/platform/android-sdk/cmdline-tools
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
           unzip -q cmdline-tools.zip
           mv cmdline-tools latest
           rm cmdline-tools.zip
 
-      - name: Accept Android SDK licenses
+      - name: Accept Android SDK licenses and install build tools
         run: |
-          export ANDROID_HOME=$HOME/android-sdk
+          export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
           export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
           yes | sdkmanager --licenses || true
-
-      - name: Install build-tools and platform via sdkmanager
-        run: |
-          export ANDROID_HOME=$HOME/android-sdk
-          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
           sdkmanager "build-tools;34.0.0" "platforms;android-34"
 
       - name: Install Python dependencies
@@ -50,8 +45,8 @@ jobs:
 
       - name: Build APK
         run: |
-          export ANDROID_HOME=$HOME/android-sdk
-          export ANDROID_SDK_ROOT=$HOME/android-sdk
+          export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
+          export ANDROID_SDK_ROOT=$ANDROID_HOME
           export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
           buildozer android debug
         env:
