@@ -21,7 +21,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt update
-          sudo apt install -y python3-pip openjdk-17-jdk-headless git zip unzip wget
+          sudo apt install -y python3-pip openjdk-17-jdk-headless git zip unzip wget autoconf automake libtool-bin
 
       - name: Download and install Android SDK
         run: |
