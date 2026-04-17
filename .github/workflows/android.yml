@@ -9,27 +9,65 @@ jobs:
   build:
     runs-on: ubuntu-24.04
 
-    container:
-      image: mendable/android-kivy-builder:latest
-      options: --privileged
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Install system deps
         run: |
-          apt-get update
-          apt-get install -y python3-pip git zip unzip wget openjdk-17-jdk-headless
+          sudo apt update
+          sudo apt install -y python3-pip openjdk-17-jdk-headless git zip unzip wget \
+            autoconf automake libtool libtool-bin pkg-config zlib1g-dev libncurses5-dev
 
-      - name: Install Buildozer + p4a
+      - name: Install Android SDK
         run: |
-          pip install buildozer cython==0.29.34
+          SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
+          mkdir -p $SDK_DIR/cmdline-tools
+          cd $SDK_DIR/cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+          unzip -q cmdline-tools.zip
+          mv cmdline-tools latest
+          rm cmdline-tools.zip
+          export PATH=$PATH:$SDK_DIR/cmdline-tools/latest/bin
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "build-tools;34.0.0" "platforms;android-34" "platform-tools"
+          mkdir -p $SDK_DIR/tools/bin
+          ln -sf $SDK_DIR/cmdline-tools/latest/bin/sdkmanager $SDK_DIR/tools/bin/sdkmanager
+
+      - name: Fix autoconf 2.71 libffi issue
+        run: |
+          # Downgrade autoconf to 2.69 from source (Ubuntu 24.04 has 2.71 which removed LT_SYS_SYMBOL_USCORE)
+          cd /tmp
+          wget -q https://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.gz
+          tar xf autoconf-2.69.tar.gz
+          cd autoconf-2.69
+          ./configure --prefix=/usr/local > /dev/null 2>&1
+          make -j$(nproc) > /dev/null 2>&1
+          sudo make install > /dev/null 2>&1
+          sudo ln -sf /usr/local/bin/autoconf /usr/bin/autoconf269
+          sudo ln -sf /usr/local/bin/automake /usr/bin/automake169
+          sudo ln -sf /usr/local/bin/aclocal /usr/bin/aclocal169
+          echo "autoconf 2.69 installed"
+
+      - name: Install p4a + buildozer
+        run: |
+          pip install cython==0.29.34 setuptools
           pip install git+https://github.com/kivy/python-for-android.git@master
+          pip install buildozer
 
       - name: Build APK
         run: |
-          buildozer android debug
+          export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
+          export ANDROID_SDK_ROOT=$ANDROID_HOME
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin:$PATH
+          export PATH=/usr/local/bin:$PATH
+          # Use autoconf 2.69 for autoreconf
+          sh -c 'export PATH=/usr/local/bin:$PATH; export AUTOCONF=/usr/local/bin/autoconf; buildozer android debug'
         env:
           BUILDZER_SKIP_ROOT_CHECK: '1'
 
