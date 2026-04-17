@@ -44,7 +44,7 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install git+https://github.com/kivy/python-for-android.git@2023.06.26 cython==0.29.34 setuptools
+          pip install git+https://github.com/kivy/python-for-android.git@v2023.05.21 cython==0.29.34 setuptools
           pip install buildozer
 
       - name: Build APK
