@@ -23,21 +23,28 @@ jobs:
           sudo apt update
           sudo apt install -y python3-pip openjdk-17-jdk-headless git zip unzip wget
 
-      - name: Download and install Android SDK command line tools
+      - name: Download and install Android SDK
         run: |
-          mkdir -p $HOME/.buildozer/android/platform/android-sdk/cmdline-tools
-          cd $HOME/.buildozer/android/platform/android-sdk/cmdline-tools
+          SDK_DIR=$HOME/.buildozer/android/platform/android-sdk
+
+          # Install cmdline-tools
+          mkdir -p $SDK_DIR/cmdline-tools
+          cd $SDK_DIR/cmdline-tools
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
           unzip -q cmdline-tools.zip
           mv cmdline-tools latest
           rm cmdline-tools.zip
 
-      - name: Accept Android SDK licenses and install build tools
-        run: |
-          export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
-          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
-          yes | sdkmanager --licenses || true
-          sdkmanager "build-tools;34.0.0" "platforms;android-34"
+          # Accept licenses
+          export PATH=$PATH:$SDK_DIR/cmdline-tools/latest/bin
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+
+          # Install required packages
+          sdkmanager "build-tools;34.0.0" "platforms;android-34" "platform-tools"
+
+          # Create symlink: buildozer looks for tools/bin/sdkmanager
+          mkdir -p $SDK_DIR/tools/bin
+          ln -sf $SDK_DIR/cmdline-tools/latest/bin/sdkmanager $SDK_DIR/tools/bin/sdkmanager
 
       - name: Install Python dependencies
         run: |
@@ -47,7 +54,7 @@ jobs:
         run: |
           export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
           export ANDROID_SDK_ROOT=$ANDROID_HOME
-          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin
           buildozer android debug
         env:
           BUILDZER_SKIP_ROOT_CHECK: '1'
