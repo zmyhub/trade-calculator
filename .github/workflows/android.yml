@@ -21,7 +21,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt update
-          sudo apt install -y python3-pip openjdk-17-jdk-headless git zip unzip wget libtool-bin
+          sudo apt install -y python3-pip openjdk-17-jdk-headless git zip unzip wget libtool automake aclocal
 
       - name: Download and install Android SDK
         run: |
@@ -46,31 +46,18 @@ jobs:
         run: |
           pip install buildozer cython setuptools
 
-      - name: Patch pythonforandroid to fix libffi autoconf compatibility
-        run: |
-          P4A_PYTHON=/opt/hostedtoolcache/Python/3.10.20/x64/bin/python3
-          P4A_SITE=$($P4A_PYTHON -c "import site; print(site.getsitepackages()[0])")
-          P4A_RECIPES=$P4A_SITE/pythonforandroid/recipes/libffi
-
-          if [ -f "$P4A_RECIPES/configure.ac" ]; then
-            # Replace deprecated AM_INIT_AUTOMAKE with AC_INIT + AM_INIT_AUTOMAKE([foreign]) 
-            # and AC_CONFIG_FILES([Makefile]) for autoconf 2.71 compatibility
-            sed -i 's/AM_INIT_AUTOMAKE/AM_INIT_AUTOMAKE([foreign])/g' "$P4A_RECIPES/configure.ac"
-            echo "Patched $P4A_RECIPES/configure.ac"
-            cat "$P4A_RECIPES/configure.ac" | head -30
-          else
-            echo "libffi recipe not found at $P4A_RECIPES, will try other paths"
-            find $P4A_SITE -name "configure.ac" -path "*libffi*" 2>/dev/null | head -5
-          fi
-
       - name: Build APK
         run: |
           export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
           export ANDROID_SDK_ROOT=$ANDROID_HOME
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin:$PATH
+          export ACLOCAL="aclocal --install"
+          export ACLOCAL_FLAGS="-I /usr/share/aclocal"
+          autoreconf -fi 2>&1 || true
           buildozer android debug
         env:
           BUILDZER_SKIP_ROOT_CHECK: '1'
+          AUTOPROXY_ALWAYS: '1'
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
