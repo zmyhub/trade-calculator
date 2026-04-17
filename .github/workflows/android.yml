@@ -45,7 +45,7 @@ jobs:
       - name: Install p4a + buildozer
         run: |
           pip install cython==0.29.34 setuptools wheel
-          pip install git+https://github.com/kivy/python-for-android.git@v2024.10.14
+          pip install git+https://github.com/kivy/python-for-android.git@v2024.01.21
           pip install buildozer
 
       - name: Build APK
