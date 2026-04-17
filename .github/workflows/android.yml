@@ -41,42 +41,9 @@ jobs:
 
       - name: Install p4a + buildozer
         run: |
-          pip install cython==0.29.34 setuptools
-          pip install git+https://github.com/kivy/python-for-android.git@master
+          pip install cython==0.29.34 setuptools wheel
+          pip install git+https://github.com/kivy/python-for-android.git@v2024.10.14
           pip install buildozer
-
-      - name: Patch libffi configure.ac for autoconf 2.71 compat
-        run: |
-          P4A_SITE=$(python3 -c "import site; print(site.getsitepackages()[0])")
-          LIBFFI_DIR=$(find $P4A_SITE -path "*/pythonforandroid/recipes/libffi/*" -name "configure.ac" 2>/dev/null | head -1)
-          echo "Found libffi configure.ac at: $LIBFFI_DIR"
-          if [ -n "$LIBFFI_DIR" ] && [ -f "$LIBFFI_DIR" ]; then
-            # On Ubuntu 24.04 with autoconf 2.71, LT_SYS_SYMBOL_USCORE macro was removed.
-            # It is referenced but never defined in the libffi configure.ac.
-            # Add a stub definition before the first usage.
-            python3 -c "
-import re
-path = '$LIBFFI_DIR'
-with open(path) as f:
-    content = f.read()
-stub = '''
-dnl Stub for autoconf 2.71 compatibility (macro removed in 2.71)
-AC_DEFUN([LT_SYS_SYMBOL_USCORE],[AC_DEFINE([LT_SYS_SYMBOL_USCORE],[1])])
-'''
-if 'LT_SYS_SYMBOL_USCORE' in content and 'AC_DEFUN([LT_SYS_SYMBOL_USCORE]' not in content:
-    # Insert stub right after first AC_INIT
-    content = re.sub(r'(AC_INIT\([^)]+\))', r'\1\n' + stub.strip(), content, count=1)
-    with open(path, 'w') as f:
-        f.write(content)
-    print('Patched OK')
-else:
-    print('Already patched or no LT_SYS_SYMBOL_USCORE found')
-"
-          else
-            echo "libffi configure.ac not found in $P4A_SITE"
-            find $P4A_SITE -name "configure.ac" 2>/dev/null | head -10
-            exit 1
-          fi
 
       - name: Build APK
         run: |
