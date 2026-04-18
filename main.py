@@ -483,12 +483,30 @@ class TradeApp(BoxLayout):
 
     def _do_export(self):
         """导出 CSV，用 Android Toast 提示，完全不碰 popup"""
-        import traceback
+        import traceback, sys
+
+        # 先收集所有信息
+        error_log = []
+        history_count = len(self.trade_history)
+
+        # 1. 保存 CSV
         try:
             self.save_history()
-        except Exception:
-            pass
-        # Android Toast 提示（不依赖 Kivy Widget）
+            error_log.append(f"save_history ok, records={history_count}")
+        except Exception as e:
+            error_log.append(f"save_history FAILED: {e}")
+
+        # 2. 检查文件是否真的写入
+        try:
+            import os
+            exists = os.path.exists(self.history_file)
+            size = os.path.getsize(self.history_file) if exists else 0
+            error_log.append(f"file exists={exists} size={size} path={self.history_file}")
+        except Exception as e:
+            error_log.append(f"file check FAILED: {e}")
+
+        # 3. Toast 提示
+        toast_msg = f"已保存 {history_count} 条记录" if history_count > 0 else "无记录可导出"
         try:
             from jnius import autoclass
             from android.runnable import run_on_ui_thread
@@ -496,9 +514,20 @@ class TradeApp(BoxLayout):
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
             @run_on_ui_thread
             def show_toast():
-                Toast.makeText(PythonActivity.mActivity, "已保存到: " + self.history_file, Toast.LENGTH_LONG).show()
+                Toast.makeText(PythonActivity.mActivity, toast_msg, Toast.LENGTH_LONG).show()
             show_toast()
-        except Exception:
+            error_log.append("toast ok")
+        except Exception as e:
+            error_log.append(f"toast FAILED: {e}")
+            # Toast 失败时打印到 stderr，logcat 可查
+            sys.stderr.write(f"[trade-calculator] toast error: {e}\n")
+
+        # 调试信息写入文件
+        try:
+            debug_file = os.path.join(os.path.dirname(self.history_file), "export_debug.log")
+            with open(debug_file, "w", encoding="utf-8") as f:
+                f.write("\n".join(error_log))
+        except:
             pass
 
     def _dismiss_toast(self, *l):
