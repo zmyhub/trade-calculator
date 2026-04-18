@@ -462,9 +462,6 @@ class TradeApp(BoxLayout):
         export_btn = ExportBtn(size_hint=(1, 0.3))
         clear_btn = ClearBtn(size_hint=(1, 0.3))
         close_btn = CloseBtn(text="关闭", size_hint=(1, 0.3))
-        export_btn.bind(on_press=lambda x: self.export_csv(popup))
-        clear_btn.bind(on_press=lambda x: self.clear_all_data(popup))
-        close_btn.bind(on_press=popup.dismiss)
         content.add_widget(export_btn)
         content.add_widget(clear_btn)
         content.add_widget(close_btn)
@@ -479,6 +476,10 @@ class TradeApp(BoxLayout):
             separator_color=Style.line_blue,
             auto_dismiss=False
         )
+        # 绑定放在 Popup 创建之后，避免 popup 变量未定义
+        export_btn.bind(on_press=lambda x, p=popup: self.export_csv(p))
+        clear_btn.bind(on_press=lambda x, p=popup: self.clear_all_data(p))
+        close_btn.bind(on_press=lambda x, p=popup: p.dismiss())
         popup.open()
 
     def export_csv(self, popup):
