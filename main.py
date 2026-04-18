@@ -5,7 +5,6 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.spinner import Spinner
 from kivy.uix.button import Button
 from kivy.uix.popup import Popup
-from kivy.uix.modalview import ModalView
 from kivy.uix.scrollview import ScrollView
 from kivy.core.window import Window
 from kivy.clock import Clock
@@ -457,32 +456,31 @@ class TradeApp(BoxLayout):
         except:
             pass
 
-    # ── 自定义菜单浮层（用 ModalView 替代 Popup）─────────────────
+    # 菜单弹窗（Popup 版本，稳定）
     def show_menu(self, instance):
-        """显示浮层菜单（ModalView 方案，最稳定）"""
         content = BoxLayout(orientation='vertical', spacing=12, padding=20)
-        title = Label(text='功能菜单', font_size='20sp', size_hint=(1, 0.35),
-                      color=Style.text_white, bold=True)
-        export_btn = ExportBtn(size_hint=(1, 0.25))
-        clear_btn = ClearBtn(size_hint=(1, 0.25))
-        close_btn = CloseBtn(text="关闭", size_hint=(1, 0.25))
-        content.add_widget(title)
+        export_btn = ExportBtn(size_hint=(1, 0.3))
+        clear_btn = ClearBtn(size_hint=(1, 0.3))
+        close_btn = CloseBtn(text="关闭", size_hint=(1, 0.3))
         content.add_widget(export_btn)
         content.add_widget(clear_btn)
         content.add_widget(close_btn)
-
-        self._menu_modal = ModalView(
+        popup = Popup(
+            title="功能菜单",
+            title_font=FONT_NAME,
+            title_size="20sp",
+            title_color=Style.text_white,
             content=content,
-            size_hint=(0.85, 0.55),
-            background_color=(0.12, 0.14, 0.20, 1),
-            auto_dismiss=True
+            size_hint=(0.8, 0.6),
+            background_color=Style.bg_main,
+            separator_color=Style.line_blue,
+            auto_dismiss=False
         )
-
-        export_btn.bind(on_press=lambda *l: (self._menu_modal.dismiss(), self.export_csv()))
-        clear_btn.bind(on_press=lambda *l: (self._menu_modal.dismiss(), self.clear_all_data()))
-        close_btn.bind(on_press=lambda *l: self._menu_modal.dismiss())
-
-        self._menu_modal.open()
+        # 导出/清空按钮：先延迟关闭 popup，再执行操作
+        export_btn.bind(on_press=lambda x: (Clock.schedule_once(lambda *l: popup.dismiss(), 0.01), self.export_csv()))
+        clear_btn.bind(on_press=lambda x: (Clock.schedule_once(lambda *l: popup.dismiss(), 0.01), self.clear_all_data()))
+        close_btn.bind(on_press=lambda x, p=popup: p.dismiss())
+        popup.open()
 
     def export_csv(self):
         self.save_history()
@@ -495,12 +493,12 @@ class TradeApp(BoxLayout):
             height="40dp",
             pos_hint={"center_x": 0.5, "center_y": 0.05}
         )
-        self.add_widget(self._toast_label)
+        self.root.add_widget(self._toast_label)
         Clock.schedule_once(lambda *l: self._dismiss_toast(), 3)
 
     def _dismiss_toast(self, *l):
         if hasattr(self, "_toast_label") and self._toast_label.parent:
-            self.remove_widget(self._toast_label)
+            self.root.remove_widget(self._toast_label)
 
     def clear_all_data(self):
         self.trade_history = []
