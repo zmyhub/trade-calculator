@@ -5,6 +5,7 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.spinner import Spinner
 from kivy.uix.button import Button
 from kivy.uix.popup import Popup
+from kivy.uix.modalview import ModalView
 from kivy.uix.scrollview import ScrollView
 from kivy.core.window import Window
 from kivy.clock import Clock
@@ -456,54 +457,32 @@ class TradeApp(BoxLayout):
         except:
             pass
 
-    # ── 自定义菜单浮层（替代 Popup，避免 Kivy 崩溃）──────────────
+    # ── 自定义菜单浮层（用 ModalView 替代 Popup）─────────────────
     def show_menu(self, instance):
-        """显示浮层菜单（最简稳定版）"""
-        # 遮罩背景，直接 add 到 TradeApp（TradeApp 就是 root）
-        self._menu_bg = Widget(size_hint=(1, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5})
-        # 菜单面板
-        self._menu_panel = BoxLayout(
-            orientation='vertical', spacing=12, padding=20,
-            size_hint=(0.85, 0.55)
-        )
-        # 给面板加背景色
-        with self._menu_panel.canvas.before:
-            from kivy.graphics import Color, Rectangle
-            Color(0.12, 0.14, 0.20, 1)
-            Rectangle(size=self._menu_panel.size)
-        self._menu_panel.bind(size=lambda *l: setattr(self._menu_panel.canvas.before.children[0], 'size', self._menu_panel.size))
-
+        """显示浮层菜单（ModalView 方案，最稳定）"""
+        content = BoxLayout(orientation='vertical', spacing=12, padding=20)
         title = Label(text='功能菜单', font_size='20sp', size_hint=(1, 0.35),
                       color=Style.text_white, bold=True)
         export_btn = ExportBtn(size_hint=(1, 0.25))
         clear_btn = ClearBtn(size_hint=(1, 0.25))
         close_btn = CloseBtn(text="关闭", size_hint=(1, 0.25))
-        self._menu_panel.add_widget(title)
-        self._menu_panel.add_widget(export_btn)
-        self._menu_panel.add_widget(clear_btn)
-        self._menu_panel.add_widget(close_btn)
+        content.add_widget(title)
+        content.add_widget(export_btn)
+        content.add_widget(clear_btn)
+        content.add_widget(close_btn)
 
-        # 遮罩
-        self._overlay = Widget(size_hint=(1, 1))
-        with self._overlay.canvas.before:
-            Color(0, 0, 0, 0.6)
-            Rectangle(size=self._overlay.size)
-        self._overlay.bind(size=lambda *l: setattr(self._overlay.canvas.before.children[0], 'size', self._overlay.size))
-        self._overlay.bind(on_touch_down=lambda *l: self.hide_menu())
+        self._menu_modal = ModalView(
+            content=content,
+            size_hint=(0.85, 0.55),
+            background_color=(0.12, 0.14, 0.20, 1),
+            auto_dismiss=True
+        )
 
-        # 按钮直接绑定（无需 dismiss popup）
-        export_btn.bind(on_press=lambda *l: (self.hide_menu(), self.export_csv()))
-        clear_btn.bind(on_press=lambda *l: (self.hide_menu(), self.clear_all_data()))
-        close_btn.bind(on_press=lambda *l: self.hide_menu())
+        export_btn.bind(on_press=lambda *l: (self._menu_modal.dismiss(), self.export_csv()))
+        clear_btn.bind(on_press=lambda *l: (self._menu_modal.dismiss(), self.clear_all_data()))
+        close_btn.bind(on_press=lambda *l: self._menu_modal.dismiss())
 
-        self._menu_bg.add_widget(self._overlay)
-        self._menu_bg.add_widget(self._menu_panel)
-        self.add_widget(self._menu_bg)
-
-    def hide_menu(self):
-        """关闭浮层菜单"""
-        if hasattr(self, '_menu_bg') and self._menu_bg.parent:
-            self.remove_widget(self._menu_bg)
+        self._menu_modal.open()
 
     def export_csv(self):
         self.save_history()
