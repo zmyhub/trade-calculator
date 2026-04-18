@@ -476,31 +476,37 @@ class TradeApp(BoxLayout):
             separator_color=Style.line_blue,
             auto_dismiss=False
         )
-        # 导出/清空按钮：先延迟关闭 popup，再执行操作
-        export_btn.bind(on_press=lambda x: (Clock.schedule_once(lambda *l: popup.dismiss(), 0.01), self.export_csv()))
-        clear_btn.bind(on_press=lambda x: (Clock.schedule_once(lambda *l: popup.dismiss(), 0.01), self.clear_all_data()))
+        export_btn.bind(on_press=lambda x: self._do_export())
+        clear_btn.bind(on_press=lambda x: self._do_clear())
         close_btn.bind(on_press=lambda x, p=popup: p.dismiss())
         popup.open()
 
-    def export_csv(self):
-        self.save_history()
-        # Toast 提示
-        self._toast_label = FullCenteredLabel(
-            text="已保存: " + self.history_file,
-            font_size="13sp",
-            color=(0.3, 0.9, 0.5, 1),
-            size_hint=(1, None),
-            height="40dp",
-            pos_hint={"center_x": 0.5, "center_y": 0.05}
-        )
-        self.root.add_widget(self._toast_label)
-        Clock.schedule_once(lambda *l: self._dismiss_toast(), 3)
+    def _do_export(self):
+        """导出 CSV，用 Android Toast 提示，完全不碰 popup"""
+        import traceback
+        try:
+            self.save_history()
+        except Exception:
+            pass
+        # Android Toast 提示（不依赖 Kivy Widget）
+        try:
+            from jnius import autoclass
+            from android.runnable import run_on_ui_thread
+            Toast = autoclass('android.widget.Toast')
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            @run_on_ui_thread
+            def show_toast():
+                Toast.makeText(PythonActivity.mActivity, "已保存到: " + self.history_file, Toast.LENGTH_LONG).show()
+            show_toast()
+        except Exception:
+            pass
 
     def _dismiss_toast(self, *l):
         if hasattr(self, "_toast_label") and self._toast_label.parent:
             self.root.remove_widget(self._toast_label)
 
-    def clear_all_data(self):
+    def _do_clear(self):
+        """清空所有数据"""
         self.trade_history = []
         self.record_container.clear_widgets()
         self.config = {"principal": "", "rate": "3"}
@@ -513,6 +519,17 @@ class TradeApp(BoxLayout):
         self.symbol.text = ""
         self.profit.text = ""
         self.balance.text = ""
+        try:
+            from jnius import autoclass
+            from android.runnable import run_on_ui_thread
+            Toast = autoclass('android.widget.Toast')
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            @run_on_ui_thread
+            def show_toast():
+                Toast.makeText(PythonActivity.mActivity, "已清空", Toast.LENGTH_SHORT).show()
+            show_toast()
+        except Exception:
+            pass
 
 # ------------------- 应用启动类 -------------------
 class TradeRecorderApp(App):
