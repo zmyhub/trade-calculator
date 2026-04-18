@@ -485,6 +485,24 @@ class TradeApp(BoxLayout):
     def export_csv(self, popup):
         self.save_history()
         popup.dismiss()
+        try:
+            from jnius import PythonActivity, cast
+            from jnius import autoclass
+            Intent = autoclass('android.content.Intent')
+            Uri = autoclass('android.net.Uri')
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+
+            intent = Intent(Intent.ACTION_SEND)
+            intent.setType('text/csv')
+            uri = Uri.fromFile(autoclass('java.io.File')(self.history_file))
+            intent.putExtra(Intent.EXTRA_STREAM, uri)
+            intent.putExtra(Intent.EXTRA_SUBJECT, '交易记录')
+            chooser = Intent.createChooser(intent, '导出交易记录')
+            current_activity = cast('android.app.Activity', PythonActivity.mActivity)
+            current_activity.startActivity(chooser)
+        except Exception:
+            # fallback: 文件已保存到 /sdcard/trade_history.csv
+            pass
 
     def clear_all_data(self, popup):
         popup.dismiss()
