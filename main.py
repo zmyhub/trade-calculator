@@ -458,53 +458,52 @@ class TradeApp(BoxLayout):
 
     # ── 自定义菜单浮层（替代 Popup，避免 Kivy 崩溃）──────────────
     def show_menu(self, instance):
-        """显示浮层菜单"""
-        from kivy.graphics import Color, Rectangle
-        from kivy.uix.widget import Widget
-
+        """显示浮层菜单（最简稳定版）"""
+        # 遮罩背景，直接 add 到 TradeApp（TradeApp 就是 root）
+        self._menu_bg = Widget(size_hint=(1, 1), pos_hint={'center_x': 0.5, 'center_y': 0.5})
         # 菜单面板
-        self._menu_overlay = Widget(size_hint=(0.85, 0.55), pos_hint={'center_x': 0.5, 'center_y': 0.5})
-        with self._menu_overlay.canvas.before:
+        self._menu_panel = BoxLayout(
+            orientation='vertical', spacing=12, padding=20,
+            size_hint=(0.85, 0.55)
+        )
+        # 给面板加背景色
+        with self._menu_panel.canvas.before:
+            from kivy.graphics import Color, Rectangle
             Color(0.12, 0.14, 0.20, 1)
-            self._menu_rect = Rectangle(pos=self._menu_overlay.pos, size=self._menu_overlay.size)
-        self._menu_overlay.bind(pos=lambda *l: setattr(self._menu_rect, 'pos', self._menu_overlay.pos))
-        self._menu_overlay.bind(size=lambda *l: setattr(self._menu_rect, 'size', self._menu_overlay.size))
+            Rectangle(size=self._menu_panel.size)
+        self._menu_panel.bind(size=lambda *l: setattr(self._menu_panel.canvas.before.children[0], 'size', self._menu_panel.size))
 
-        inner = BoxLayout(orientation='vertical', spacing=12, padding=20, size_hint=(1, 1))
-        title = Label(text='功能菜单', font_size='20sp', size_hint=(1, 0.35), color=Style.text_white, bold=True)
+        title = Label(text='功能菜单', font_size='20sp', size_hint=(1, 0.35),
+                      color=Style.text_white, bold=True)
         export_btn = ExportBtn(size_hint=(1, 0.25))
         clear_btn = ClearBtn(size_hint=(1, 0.25))
         close_btn = CloseBtn(text="关闭", size_hint=(1, 0.25))
-        inner.add_widget(title)
-        inner.add_widget(export_btn)
-        inner.add_widget(clear_btn)
-        inner.add_widget(close_btn)
-        self._menu_overlay.add_widget(inner)
+        self._menu_panel.add_widget(title)
+        self._menu_panel.add_widget(export_btn)
+        self._menu_panel.add_widget(clear_btn)
+        self._menu_panel.add_widget(close_btn)
 
-        # 遮罩背景
-        self._menu_bg = Widget(size_hint=(1, 1))
-        with self._menu_bg.canvas.before:
+        # 遮罩
+        self._overlay = Widget(size_hint=(1, 1))
+        with self._overlay.canvas.before:
             Color(0, 0, 0, 0.6)
-            Rectangle(size=self._menu_bg.size)
-        self._menu_bg.bind(size=lambda *l: setattr(self._menu_bg.canvas.before.children[0], 'size', self._menu_bg.size))
+            Rectangle(size=self._overlay.size)
+        self._overlay.bind(size=lambda *l: setattr(self._overlay.canvas.before.children[0], 'size', self._overlay.size))
+        self._overlay.bind(on_touch_down=lambda *l: self.hide_menu())
 
-        def on_bg_touch(instance, touch):
-            if self._menu_bg.collide_point(*touch.pos):
-                self.hide_menu()
-        self._menu_bg.bind(on_touch_down=on_bg_touch)
-
-        # 按钮直接绑定
+        # 按钮直接绑定（无需 dismiss popup）
         export_btn.bind(on_press=lambda *l: (self.hide_menu(), self.export_csv()))
         clear_btn.bind(on_press=lambda *l: (self.hide_menu(), self.clear_all_data()))
         close_btn.bind(on_press=lambda *l: self.hide_menu())
 
-        self._menu_bg.add_widget(self._menu_overlay)
-        self.root.add_widget(self._menu_bg)
+        self._menu_bg.add_widget(self._overlay)
+        self._menu_bg.add_widget(self._menu_panel)
+        self.add_widget(self._menu_bg)
 
     def hide_menu(self):
         """关闭浮层菜单"""
         if hasattr(self, '_menu_bg') and self._menu_bg.parent:
-            self.root.remove_widget(self._menu_bg)
+            self.remove_widget(self._menu_bg)
 
     def export_csv(self):
         self.save_history()
@@ -517,12 +516,12 @@ class TradeApp(BoxLayout):
             height="40dp",
             pos_hint={"center_x": 0.5, "center_y": 0.05}
         )
-        self.root.add_widget(self._toast_label)
+        self.add_widget(self._toast_label)
         Clock.schedule_once(lambda *l: self._dismiss_toast(), 3)
 
     def _dismiss_toast(self, *l):
         if hasattr(self, "_toast_label") and self._toast_label.parent:
-            self.root.remove_widget(self._toast_label)
+            self.remove_widget(self._toast_label)
 
     def clear_all_data(self):
         self.trade_history = []
