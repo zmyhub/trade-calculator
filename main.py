@@ -487,40 +487,7 @@ class TradeApp(BoxLayout):
         self.save_history()
         path = self.history_file
 
-        # ── Android 分享 CSV ─────────────────────────────────────
-        try:
-            from jnius import autoclass
-            from android.runnable import run_on_ui_thread
-
-            Intent = autoclass('android.content.Intent')
-            Uri = autoclass('android.net.Uri')
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-
-            @run_on_ui_thread
-            def do_share():
-                try:
-                    f = autoclass('java.io.File')(path)
-                    uri = Uri.fromFile(f)
-                    intent = Intent(Intent.ACTION_SEND)
-                    intent.type = 'text/csv'
-                    intent.putExtra(Intent.EXTRA_STREAM, uri)
-                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    chooser = Intent.createChooser(intent, '导出交易记录')
-                    PythonActivity.mActivity.startActivity(chooser)
-                except Exception:
-                    # API 24+ 需要 FileProvider，这里 fallback 为 Toast
-                    from android.widget import Toast
-                    Toast.makeText(
-                        PythonActivity.mActivity,
-                        f"已保存: {path}",
-                        Toast.LENGTH_LONG
-                    ).show()
-
-            do_share()
-        except Exception:
-            pass
-
-        # ── 5 秒弹窗显示路径 ─────────────────────────────────────
+        # ── 导出完成，显示 5 秒弹窗 ──────────────────────────────
         self._show_export_toast(path)
 
     def _show_export_toast(self, path):
