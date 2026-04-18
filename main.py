@@ -456,56 +456,69 @@ class TradeApp(BoxLayout):
         except:
             pass
 
-    # 菜单弹窗
+    # ── 自定义菜单浮层（替代 Popup，避免 Kivy 崩溃）──────────────
     def show_menu(self, instance):
-        content = BoxLayout(orientation='vertical', spacing=12, padding=20)
-        export_btn = ExportBtn(size_hint=(1, 0.3))
-        clear_btn = ClearBtn(size_hint=(1, 0.3))
-        close_btn = CloseBtn(text="关闭", size_hint=(1, 0.3))
-        content.add_widget(export_btn)
-        content.add_widget(clear_btn)
-        content.add_widget(close_btn)
-        popup = Popup(
-            title="功能菜单",
-            title_font=FONT_NAME,
-            title_size="20sp",
-            title_color=Style.text_white,
-            content=content,
-            size_hint=(0.8, 0.6),
-            background_color=Style.bg_main,
-            separator_color=Style.line_blue,
-            auto_dismiss=False
-        )
-        # 绑定放在 Popup 创建之后，避免 popup 变量未定义
-        export_btn.bind(on_press=lambda x: (Clock.schedule_once(lambda *l: popup.dismiss(), -1), self.export_csv()))
-        clear_btn.bind(on_press=lambda x: (Clock.schedule_once(lambda *l: popup.dismiss(), -1), self.clear_all_data()))
-        close_btn.bind(on_press=lambda x, p=popup: p.dismiss())
-        popup.open()
+        """显示浮层菜单"""
+        from kivy.graphics import Color, Rectangle
+        from kivy.uix.widget import Widget
+
+        # 菜单面板
+        self._menu_overlay = Widget(size_hint=(0.85, 0.55), pos_hint={'center_x': 0.5, 'center_y': 0.5})
+        with self._menu_overlay.canvas.before:
+            Color(0.12, 0.14, 0.20, 1)
+            self._menu_rect = Rectangle(pos=self._menu_overlay.pos, size=self._menu_overlay.size)
+        self._menu_overlay.bind(pos=lambda *l: setattr(self._menu_rect, 'pos', self._menu_overlay.pos))
+        self._menu_overlay.bind(size=lambda *l: setattr(self._menu_rect, 'size', self._menu_overlay.size))
+
+        inner = BoxLayout(orientation='vertical', spacing=12, padding=20, size_hint=(1, 1))
+        title = Label(text='功能菜单', font_size='20sp', size_hint=(1, 0.35), color=Style.text_white, bold=True)
+        export_btn = ExportBtn(size_hint=(1, 0.25))
+        clear_btn = ClearBtn(size_hint=(1, 0.25))
+        close_btn = CloseBtn(text="关闭", size_hint=(1, 0.25))
+        inner.add_widget(title)
+        inner.add_widget(export_btn)
+        inner.add_widget(clear_btn)
+        inner.add_widget(close_btn)
+        self._menu_overlay.add_widget(inner)
+
+        # 遮罩背景
+        self._menu_bg = Widget(size_hint=(1, 1))
+        with self._menu_bg.canvas.before:
+            Color(0, 0, 0, 0.6)
+            Rectangle(size=self._menu_bg.size)
+        self._menu_bg.bind(size=lambda *l: setattr(self._menu_bg.canvas.before.children[0], 'size', self._menu_bg.size))
+
+        def on_bg_touch(instance, touch):
+            if self._menu_bg.collide_point(*touch.pos):
+                self.hide_menu()
+        self._menu_bg.bind(on_touch_down=on_bg_touch)
+
+        # 按钮直接绑定
+        export_btn.bind(on_press=lambda *l: (self.hide_menu(), self.export_csv()))
+        clear_btn.bind(on_press=lambda *l: (self.hide_menu(), self.clear_all_data()))
+        close_btn.bind(on_press=lambda *l: self.hide_menu())
+
+        self._menu_bg.add_widget(self._menu_overlay)
+        self.root.add_widget(self._menu_bg)
+
+    def hide_menu(self):
+        """关闭浮层菜单"""
+        if hasattr(self, '_menu_bg') and self._menu_bg.parent:
+            self.root.remove_widget(self._menu_bg)
 
     def export_csv(self):
-        import traceback
-        try:
-            self.save_history()
-        except Exception as e:
-            with open("/sdcard/export_crash.log", "a") as f:
-                f.write(f"[save_history] {e}\n{traceback.format_exc()}\n")
-
-        # 简单提示（不用 Popup，避免 Kivy 2.x 崩溃）
-        try:
-            self._toast_label = FullCenteredLabel(
-                text="已保存到: " + self.history_file,
-                font_size="13sp",
-                color=(0.3, 0.9, 0.5, 1),
-                size_hint=(1, None),
-                height="40dp",
-                pos_hint={"center_x": 0.5, "center_y": 0.05}
-            )
-            self.root.add_widget(self._toast_label)
-            from kivy.clock import Clock
-            Clock.schedule_once(lambda *l: self._dismiss_toast(), 3)
-        except Exception as e:
-            with open("/sdcard/export_crash.log", "a") as f:
-                f.write(f"[toast] {e}\n{traceback.format_exc()}\n")
+        self.save_history()
+        # Toast 提示
+        self._toast_label = FullCenteredLabel(
+            text="已保存: " + self.history_file,
+            font_size="13sp",
+            color=(0.3, 0.9, 0.5, 1),
+            size_hint=(1, None),
+            height="40dp",
+            pos_hint={"center_x": 0.5, "center_y": 0.05}
+        )
+        self.root.add_widget(self._toast_label)
+        Clock.schedule_once(lambda *l: self._dismiss_toast(), 3)
 
     def _dismiss_toast(self, *l):
         if hasattr(self, "_toast_label") and self._toast_label.parent:
