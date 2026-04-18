@@ -485,8 +485,11 @@ class TradeApp(BoxLayout):
     def export_csv(self, popup):
         popup.dismiss()
         self.save_history()
+        path = self.history_file
+
+        # ── Android 分享 CSV ─────────────────────────────────────
         try:
-            from jnius import autoclass, cast
+            from jnius import autoclass
             from android.runnable import run_on_ui_thread
 
             Intent = autoclass('android.content.Intent')
@@ -495,18 +498,55 @@ class TradeApp(BoxLayout):
 
             @run_on_ui_thread
             def do_share():
-                intent = Intent(Intent.ACTION_SEND)
-                intent.setType('text/csv')
-                f = autoclass('java.io.File')(self.history_file)
-                uri = Uri.fromFile(f)
-                intent.putExtra(Intent.EXTRA_STREAM, uri)
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                chooser = Intent.createChooser(intent, '导出交易记录')
-                PythonActivity.mActivity.startActivity(chooser)
+                try:
+                    f = autoclass('java.io.File')(path)
+                    uri = Uri.fromFile(f)
+                    intent = Intent(Intent.ACTION_SEND)
+                    intent.type = 'text/csv'
+                    intent.putExtra(Intent.EXTRA_STREAM, uri)
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    chooser = Intent.createChooser(intent, '导出交易记录')
+                    PythonActivity.mActivity.startActivity(chooser)
+                except Exception:
+                    # API 24+ 需要 FileProvider，这里 fallback 为 Toast
+                    from android.widget import Toast
+                    Toast.makeText(
+                        PythonActivity.mActivity,
+                        f"已保存: {path}",
+                        Toast.LENGTH_LONG
+                    ).show()
 
             do_share()
-        except Exception as e:
-            print(f"导出失败: {e}")
+        except Exception:
+            pass
+
+        # ── 5 秒弹窗显示路径 ─────────────────────────────────────
+        self._show_export_toast(path)
+
+    def _show_export_toast(self, path):
+        """5 秒 Popup 提示导出路径"""
+        from kivy.clock import Clock
+        content = BoxLayout(orientation='vertical', padding=16, spacing=8)
+        lbl = FullCenteredLabel(
+            text="已导出交易记录",
+            font_size="15sp", size_hint=(1, 0.6)
+        )
+        path_lbl = FullCenteredLabel(
+            text=path,
+            font_size="11sp", size_hint=(1, 0.4),
+            color=Style.text_gray
+        )
+        content.add_widget(lbl)
+        content.add_widget(path_lbl)
+        toast = Popup(
+            content=content,
+            size_hint=(0.85, 0.2),
+            background_color=(0.15, 0.18, 0.24, 0.98),
+            separator_color=Style.line_blue,
+            auto_dismiss=True
+        )
+        toast.open()
+        Clock.schedule_once(lambda *l: toast.dismiss(), 5)
 
     def clear_all_data(self, popup):
         popup.dismiss()
