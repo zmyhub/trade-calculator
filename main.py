@@ -14,20 +14,27 @@ import json
 import os
 from math import log
 
-# ------------------- 全局基础配置 -------------------
-Window.clearcolor = (0.08, 0.10, 0.15, 1)
-Window.softinput_mode = "below_target"
+# ------------------- 全局基础配置（延迟到 App.build 时执行）-------------------
+# Window 配置移入 App.build()，避免模块级崩溃
 
 # 中文字体绑定（解决乱码）— 安卓用系统字体，桌面 fallback
 from kivy.core.text import LabelBase
 import sys
-if sys.platform == "android":
+import os as _os
+
+FONT_REGISTERED = False
+FONT_NAME = "Roboto"
+
+if sys.platform == "android" and _os.path.exists("/system/fonts/NotoSansCJK-Regular.ttc"):
     try:
         LabelBase.register(name="NotoSans", fn_regular="/system/fonts/NotoSansCJK-Regular.ttc")
-    except:
-        LabelBase.register(name="NotoSans", fn_regular="")
-else:
-    LabelBase.register(name="NotoSans", fn_regular="")
+        FONT_REGISTERED = True
+        FONT_NAME = "NotoSans"
+    except Exception:
+        FONT_REGISTERED = False
+
+# Window 初始化延迟到 App build 时，避免模块级访问崩溃
+_window_configured = False
 
 # ------------------- 全局样式类（统一高度+内边距，解决视觉错位） -------------------
 class Style:
@@ -107,7 +114,7 @@ class FullCenteredLabel(Label):
         super().__init__(
             text=text,
             color=Style.text_white,
-            font_name="NotoSans",
+            font_name=FONT_NAME,
             halign="center",
             valign="center",
             **kwargs
@@ -118,7 +125,7 @@ class FullCenteredBtn(Button):
     def __init__(self, text="", **kwargs):
         super().__init__(
             text=text,
-            font_name="NotoSans",
+            font_name=FONT_NAME,
             halign="center",
             valign="center",
             border=(0, 0, 0, 0),
@@ -133,7 +140,7 @@ class CenterInput(TextInput):
             text=text,
             hint_text=hint_text,
             hint_text_color=Style.text_gray,
-            font_name="NotoSans",
+            font_name=FONT_NAME,
             halign="center",
             padding=Style.padding_center,
             background_color=Style.bg_card,
@@ -149,7 +156,7 @@ class CenterSpinner(Spinner):
         super().__init__(
             text=text,
             values=values,
-            font_name="NotoSans",
+            font_name=FONT_NAME,
             halign="center",
             padding=Style.padding_center,
             background_color=Style.bg_card,  # 【核心修改】Spinner背景色和输入框一致，不再纯黑
@@ -491,6 +498,9 @@ class TradeApp(BoxLayout):
 # ------------------- 应用启动类 -------------------
 class TradeRecorderApp(App):
     def build(self):
+        from kivy.core.window import Window
+        Window.clearcolor = (0.08, 0.10, 0.15, 1)
+        Window.softinput_mode = "below_target"
         return TradeApp()
 
 # ------------------- 主入口 -------------------
