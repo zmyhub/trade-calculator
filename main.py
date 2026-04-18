@@ -477,19 +477,13 @@ class TradeApp(BoxLayout):
             auto_dismiss=False
         )
         # 绑定放在 Popup 创建之后，避免 popup 变量未定义
-        export_btn.bind(on_press=lambda x, p=popup: self.export_csv(p))
-        clear_btn.bind(on_press=lambda x, p=popup: self.clear_all_data(p))
+        export_btn.bind(on_press=lambda x: (Clock.schedule_once(lambda *l: popup.dismiss(), -1), self.export_csv()))
+        clear_btn.bind(on_press=lambda x: (Clock.schedule_once(lambda *l: popup.dismiss(), -1), self.clear_all_data()))
         close_btn.bind(on_press=lambda x, p=popup: p.dismiss())
         popup.open()
 
-    def export_csv(self, popup):
+    def export_csv(self):
         import traceback
-        try:
-            popup.dismiss()
-        except Exception as e:
-            with open("/sdcard/export_crash.log", "a") as f:
-                f.write(f"[popup.dismiss] {e}\n{traceback.format_exc()}\n")
-
         try:
             self.save_history()
         except Exception as e:
@@ -517,8 +511,7 @@ class TradeApp(BoxLayout):
         if hasattr(self, "_toast_label") and self._toast_label.parent:
             self.root.remove_widget(self._toast_label)
 
-    def clear_all_data(self, popup):
-        popup.dismiss()
+    def clear_all_data(self):
         self.trade_history = []
         self.record_container.clear_widgets()
         self.config = {"principal": "", "rate": "3"}
