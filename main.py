@@ -15,26 +15,31 @@ import os
 from math import log
 
 # ------------------- 全局基础配置（延迟到 App.build 时执行）-------------------
-# Window 配置移入 App.build()，避免模块级崩溃
 
-# 中文字体绑定（解决乱码）— 安卓用系统字体，桌面 fallback
+# 中文字体绑定（解决乱码）— 尝试注册，不在乎平台
 from kivy.core.text import LabelBase
-import sys
-import os as _os
+import os
 
 FONT_REGISTERED = False
 FONT_NAME = "Roboto"
 
-if sys.platform == "android" and _os.path.exists("/system/fonts/NotoSansCJK-Regular.ttc"):
-    try:
-        LabelBase.register(name="NotoSans", fn_regular="/system/fonts/NotoSansCJK-Regular.ttc")
-        FONT_REGISTERED = True
-        FONT_NAME = "NotoSans"
-    except Exception:
-        FONT_REGISTERED = False
-
-# Window 初始化延迟到 App build 时，避免模块级访问崩溃
-_window_configured = False
+# 尝试多个常见中文字体路径
+FONT_PATHS = [
+    "/system/fonts/NotoSansCJK-Regular.ttc",
+    "/system/fonts/NotoSansSC-Regular.ttf",
+    "/system/fonts/NotoSansCJKsc-Regular.ttc",
+    "/system/fonts/DroidSansFallbackFull.ttf",
+    "/system/fonts/WenQuanYiMicroHei.ttf",
+]
+for _fp in FONT_PATHS:
+    if os.path.exists(_fp):
+        try:
+            LabelBase.register(name="NotoSans", fn_regular=_fp)
+            FONT_REGISTERED = True
+            FONT_NAME = "NotoSans"
+            break
+        except Exception:
+            pass
 
 # ------------------- 全局样式类（统一高度+内边距，解决视觉错位） -------------------
 class Style:
@@ -326,7 +331,7 @@ class TradeApp(BoxLayout):
     def show_delete_confirm(self, record):
         content = BoxLayout(orientation='vertical', spacing=20, padding=30)
         content.add_widget(FullCenteredLabel(
-            text=f"确认删除这条记录？\n序号：{record.get('id', '')} | 币对：{record.get('symbol', '未知')}", 
+            text=f"确认删除这条记录？\n序号：{record.get('id', '')} | 币对：{record.get('symbol', '未知')}",
             font_size="16sp"
         ))
         btn_row = BoxLayout(orientation='horizontal', spacing=15, size_hint=(1, 0.3))
@@ -338,7 +343,7 @@ class TradeApp(BoxLayout):
 
         self.delete_popup = Popup(
             title="删除确认",
-            title_font="NotoSans",
+            title_font=FONT_NAME,
             title_size="18sp",
             title_color=Style.text_white,
             content=content,
@@ -453,16 +458,6 @@ class TradeApp(BoxLayout):
 
     # 菜单弹窗
     def show_menu(self, instance):
-        popup = Popup(
-            title="功能菜单",
-            title_font="NotoSans",
-            title_size="20sp",
-            title_color=Style.text_white,
-            size_hint=(0.8, 0.6),
-            background_color=Style.bg_main,
-            separator_color=Style.line_blue,
-            auto_dismiss=False
-        )
         content = BoxLayout(orientation='vertical', spacing=12, padding=20)
         export_btn = ExportBtn(size_hint=(1, 0.3))
         clear_btn = ClearBtn(size_hint=(1, 0.3))
@@ -473,7 +468,17 @@ class TradeApp(BoxLayout):
         content.add_widget(export_btn)
         content.add_widget(clear_btn)
         content.add_widget(close_btn)
-        popup.content = content
+        popup = Popup(
+            title="功能菜单",
+            title_font=FONT_NAME,
+            title_size="20sp",
+            title_color=Style.text_white,
+            content=content,
+            size_hint=(0.8, 0.6),
+            background_color=Style.bg_main,
+            separator_color=Style.line_blue,
+            auto_dismiss=False
+        )
         popup.open()
 
     def export_csv(self, popup):
