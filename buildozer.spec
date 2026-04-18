@@ -7,9 +7,12 @@ package.domain = org.tradeapp
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json
 
+icon.filename = %(source.dir)s/icons/icon.png
+android.icon.filename = %(source.dir)s/icons/icon.png
+
 version = 1.0.0
 
-requirements = python3,kivy==2.2.0,plyer
+requirements = python3,kivy==2.2.0
 
 orientation = portrait
 
