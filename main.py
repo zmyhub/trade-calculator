@@ -485,35 +485,22 @@ class TradeApp(BoxLayout):
     def export_csv(self, popup):
         popup.dismiss()
         self.save_history()
-        path = self.history_file
-
-        # ── 导出完成，显示 5 秒弹窗 ──────────────────────────────
-        self._show_export_toast(path)
-
-    def _show_export_toast(self, path):
-        """5 秒 Popup 提示导出路径"""
+        # 简单提示（不用 Popup，避免 Kivy 2.x 崩溃）
+        self._toast_label = FullCenteredLabel(
+            text="已保存到: " + self.history_file,
+            font_size="13sp",
+            color=(0.3, 0.9, 0.5, 1),
+            size_hint=(1, None),
+            height="40dp",
+            pos_hint={"center_x": 0.5, "center_y": 0.05}
+        )
+        self.root.add_widget(self._toast_label)
         from kivy.clock import Clock
-        content = BoxLayout(orientation='vertical', padding=16, spacing=8)
-        lbl = FullCenteredLabel(
-            text="已导出交易记录",
-            font_size="15sp", size_hint=(1, 0.6)
-        )
-        path_lbl = FullCenteredLabel(
-            text=path,
-            font_size="11sp", size_hint=(1, 0.4),
-            color=Style.text_gray
-        )
-        content.add_widget(lbl)
-        content.add_widget(path_lbl)
-        toast = Popup(
-            content=content,
-            size_hint=(0.85, 0.2),
-            background_color=(0.15, 0.18, 0.24, 0.98),
-            separator_color=Style.line_blue,
-            auto_dismiss=True
-        )
-        toast.open()
-        Clock.schedule_once(lambda *l: toast.dismiss(), 5)
+        Clock.schedule_once(lambda *l: self._dismiss_toast(), 3)
+
+    def _dismiss_toast(self, *l):
+        if hasattr(self, "_toast_label") and self._toast_label.parent:
+            self.root.remove_widget(self._toast_label)
 
     def clear_all_data(self, popup):
         popup.dismiss()
