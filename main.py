@@ -483,20 +483,35 @@ class TradeApp(BoxLayout):
         popup.open()
 
     def export_csv(self, popup):
-        popup.dismiss()
-        self.save_history()
+        import traceback
+        try:
+            popup.dismiss()
+        except Exception as e:
+            with open("/sdcard/export_crash.log", "a") as f:
+                f.write(f"[popup.dismiss] {e}\n{traceback.format_exc()}\n")
+
+        try:
+            self.save_history()
+        except Exception as e:
+            with open("/sdcard/export_crash.log", "a") as f:
+                f.write(f"[save_history] {e}\n{traceback.format_exc()}\n")
+
         # 简单提示（不用 Popup，避免 Kivy 2.x 崩溃）
-        self._toast_label = FullCenteredLabel(
-            text="已保存到: " + self.history_file,
-            font_size="13sp",
-            color=(0.3, 0.9, 0.5, 1),
-            size_hint=(1, None),
-            height="40dp",
-            pos_hint={"center_x": 0.5, "center_y": 0.05}
-        )
-        self.root.add_widget(self._toast_label)
-        from kivy.clock import Clock
-        Clock.schedule_once(lambda *l: self._dismiss_toast(), 3)
+        try:
+            self._toast_label = FullCenteredLabel(
+                text="已保存到: " + self.history_file,
+                font_size="13sp",
+                color=(0.3, 0.9, 0.5, 1),
+                size_hint=(1, None),
+                height="40dp",
+                pos_hint={"center_x": 0.5, "center_y": 0.05}
+            )
+            self.root.add_widget(self._toast_label)
+            from kivy.clock import Clock
+            Clock.schedule_once(lambda *l: self._dismiss_toast(), 3)
+        except Exception as e:
+            with open("/sdcard/export_crash.log", "a") as f:
+                f.write(f"[toast] {e}\n{traceback.format_exc()}\n")
 
     def _dismiss_toast(self, *l):
         if hasattr(self, "_toast_label") and self._toast_label.parent:
