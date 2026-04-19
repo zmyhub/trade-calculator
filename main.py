@@ -12,6 +12,7 @@ from kivy.properties import ObjectProperty, NumericProperty, BooleanProperty
 import csv
 import json
 import os
+import sys
 from math import log
 
 # ------------------- 全局基础配置（延迟到 App.build 时执行）-------------------
@@ -500,95 +501,71 @@ class TradeApp(BoxLayout):
             print(f"[toast] {msg}")
 
     def _do_export(self):
-        """导出 CSV 到 Download 文件夹（纯 Python 实现，无需 Android API）"""
+        """导出 CSV 到 Downloads 文件夹（通过 MediaStore API，Android 10+ 有效）"""
         import traceback, time, shutil
 
-        debug_lines = []
-        debug_lines.append(f"[{time.strftime('%H:%M:%S')}] export start")
+        debug_file = os.path.join(os.path.dirname(self.history_file), "export_debug.log")
 
         try:
-            # 1. 先保存 CSV 到私有目录
             self.save_history()
             history_count = len(self.trade_history)
-            debug_lines.append(f"save_history ok, records={history_count}")
 
             if history_count == 0:
                 self._show_toast("无记录可导出", long_duration=True)
                 return
 
-            src_size = os.path.getsize(self.history_file)
-            debug_lines.append(f"source: {self.history_file} ({src_size} bytes)")
-
-            # 2. 尝试多种路径，找一个能写的
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             file_name = f"trade_history_{timestamp}.csv"
 
-            # 路径优先级：从最宽松的尝试到最保守的
-            dest_paths = []
+            with open(debug_file, "w", encoding="utf-8") as f:
+                f.write(f"[{timestamp}] export start, records={history_count}\n")
 
-            # 路径1: /sdcard/Download/ （Android 9 及之前最常用）
-            dest_paths.append(f"/sdcard/Download/{file_name}")
-            dest_paths.append(f"/sdcard/Downloads/{file_name}")
-            # 路径2: 外部存储公共目录
-            try:
-                from android.os import Environment
-                ext = Environment.getExternalStoragePublicDirectory("downloads").getAbsolutePath()
-                dest_paths.append(f"{ext}/{file_name}")
-            except Exception as e:
-                debug_lines.append(f"Environment path failed: {e}")
+            # 通过 jnius 调用 Android MediaStore API
+            from jnius import autoclass
 
-            # 路径3: app 外部存储（不需要权限）
-            try:
-                from android.os import Environment
-                app_ext = Environment.getExternalFilesDir("downloads")
-                if app_ext:
-                    dest_paths.append(f"{app_ext.getAbsolutePath()}/{file_name}")
-            except Exception as e:
-                debug_lines.append(f"getExternalFilesDir failed: {e}")
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            activity = PythonActivity.mActivity
+            resolver = activity.getContentResolver()
 
-            # 路径4: app 内部存储（始终可用）
-            app_dir = os.path.dirname(self.history_file)  # e.g. /data/data/.../files
-            parent_dir = os.path.dirname(app_dir)
-            dest_paths.append(f"{parent_dir}/Download/{file_name}")
-            dest_paths.append(f"{parent_dir}/download/{file_name}")
+            ContentValues = autoclass('android.content.ContentValues')
+            MediaStoreDownloads = autoclass('android.provider.MediaStore$Downloads')
+            Environment = autoclass('android.os.Environment')
+            Build = autoclass('android.os.Build')
 
-            ok_path = None
-            for dp in dest_paths:
-                try:
-                    dp_dir = os.path.dirname(dp)
-                    os.makedirs(dp_dir, exist_ok=True)
-                    shutil.copy(self.history_file, dp)
-                    ok_path = dp
-                    debug_lines.append(f"SUCCESS -> {dp}")
-                    break
-                except Exception as e:
-                    debug_lines.append(f"FAIL {dp}: {e}")
+            values = ContentValues()
+            values.put("_display_name", file_name)
+            values.put("mime_type", "text/csv")
 
-            # 3. 反馈
-            if ok_path:
-                self._show_toast(f"已导出到:\n{ok_path}", long_duration=True)
+            if Build.VERSION.SDK_INT >= 29:
+                # Android 10+：必须用 MediaStore API
+                values.put("relative_path", "Download")
             else:
-                # 最终回退：写入 app 私有目录
-                fallback = f"/data/data/org.tradeapp.trade_calculator/files/{file_name}"
-                try:
-                    shutil.copy(self.history_file, fallback)
-                    self._show_toast(f"已保存到 app 目录:\n{fallback}", long_duration=True)
-                    debug_lines.append(f"FALLBACK -> {fallback}")
-                except Exception as e2:
-                    self._show_toast("导出失败，请检查权限", long_duration=True)
-                    debug_lines.append(f"FALLBACK FAIL: {e2}")
+                # Android 9 及以下
+                downloads_dir = Environment.getExternalStoragePublicDirectory("downloads").getAbsolutePath()
+                values.put("_data", f"{downloads_dir}/{file_name}")
+
+            uri = resolver.insert(MediaStoreDownloads.EXTERNAL_CONTENT_URI, values)
+
+            with resolver.openOutputStream(uri) as out:
+                with open(self.history_file, "rb") as src:
+                    shutil.copyfileobj(src, out)
+
+            with open(debug_file, "a", encoding="utf-8") as f:
+                f.write(f"SUCCESS: {file_name}\n")
+
+            self._show_toast(f"已保存到:\nDownload/{file_name}", long_duration=True)
 
         except Exception as e:
-            debug_lines.append(f"OUTER ERROR: {e}")
-            debug_lines.append(traceback.format_exc())
-            self._show_toast(f"导出异常: {e}", long_duration=True)
-
-        # 写入调试日志
-        try:
-            with open("/sdcard/export_debug.log", "w", encoding="utf-8") as f:
-                f.write("\n".join(debug_lines))
-        except Exception:
-            pass
+            err = traceback.format_exc()
+            try:
+                with open(debug_file, "a", encoding="utf-8") as f:
+                    f.write(f"ERROR: {e}\n{err}\n")
+            except:
+                pass
+            try:
+                self._show_toast(f"导出失败: {e}", long_duration=True)
+            except:
+                pass
 
     def _dismiss_toast(self, *l):
         if hasattr(self, "_toast_label") and self._toast_label.parent:
