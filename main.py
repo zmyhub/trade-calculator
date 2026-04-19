@@ -483,9 +483,27 @@ class TradeApp(BoxLayout):
         popup.open()
 
     def export_csv(self, popup):
-        """导出 CSV — 直接调用 _do_export（jnius + MediaStore 方式）"""
+        """导出 CSV — Pydroid 原版逻辑：只调用 save_history()，写 /sdcard/"""
+        import traceback
         popup.dismiss()
-        self._do_export()
+        try:
+            self.save_history()
+            if os.path.exists(self.history_file):
+                import time
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                dest = f"/sdcard/trade_history_{timestamp}.csv"
+                import shutil
+                shutil.copy(self.history_file, dest)
+                self._show_toast(f"已导出到:\n{dest}", long_duration=True)
+            else:
+                self._show_toast("无记录可导出", long_duration=True)
+        except Exception as e:
+            try:
+                with open("/sdcard/export_err.log", "w", encoding="utf-8") as f:
+                    f.write(traceback.format_exc())
+            except:
+                pass
+            self._show_toast(f"导出失败: {e}", long_duration=True)
 
     def clear_all_data(self, popup):
         popup.dismiss()
