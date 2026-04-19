@@ -481,48 +481,116 @@ class TradeApp(BoxLayout):
         close_btn.bind(on_press=lambda x, p=popup: p.dismiss())
         popup.open()
 
-    def _do_export(self):
-        """导出 CSV，用 Android Toast 提示，完全不碰 popup"""
-        import traceback, sys
+    # ---- Android Toast 工具 ----
+    def _show_toast(self, msg, long_duration=False):
+        """在 Android 上显示 Toast，在桌面/其他平台打印到 stdout"""
+        try:
+            from jnius import autoclass
+            from android.runnable import run_on_ui_thread
+            Toast = autoclass('android.widget.Toast')
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            duration = Toast.LENGTH_LONG if long_duration else Toast.LENGTH_SHORT
 
-        # 先收集所有信息
+            @run_on_ui_thread
+            def show_toast():
+                Toast.makeText(PythonActivity.mActivity, msg, duration).show()
+            show_toast()
+        except Exception:
+            # 非 Android 平台降级到打印
+            print(f"[toast] {msg}")
+
+    def _do_export(self):
+        """导出 CSV 到 Downloads 并触发分享"""
+        import traceback, sys, time, shutil
+
         error_log = []
         history_count = len(self.trade_history)
 
         # 1. 保存 CSV
         try:
             self.save_history()
-            error_log.append(f"save_history ok, records={history_count}")
+            error_log.append(f"save_history ok: {history_count} records")
         except Exception as e:
             error_log.append(f"save_history FAILED: {e}")
+            self._show_toast(f"保存失败: {e}", long_duration=True)
+            return
 
-        # 2. 检查文件是否真的写入
-        try:
-            import os
-            exists = os.path.exists(self.history_file)
-            size = os.path.getsize(self.history_file) if exists else 0
-            error_log.append(f"file exists={exists} size={size} path={self.history_file}")
-        except Exception as e:
-            error_log.append(f"file check FAILED: {e}")
+        if not os.path.exists(self.history_file) or history_count == 0:
+            self._show_toast("无记录可导出", long_duration=True)
+            return
 
-        # 3. Toast 提示
-        toast_msg = f"已保存 {history_count} 条记录" if history_count > 0 else "无记录可导出"
+        error_log.append(f"source file: {self.history_file} size={os.path.getsize(self.history_file)}")
+
+        # 2. 复制到 Downloads 目录
         try:
-            from jnius import autoclass
+            from jnius import autoclass, cast
             from android.runnable import run_on_ui_thread
-            Toast = autoclass('android.widget.Toast')
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            @run_on_ui_thread
-            def show_toast():
-                Toast.makeText(PythonActivity.mActivity, toast_msg, Toast.LENGTH_LONG).show()
-            show_toast()
-            error_log.append("toast ok")
-        except Exception as e:
-            error_log.append(f"toast FAILED: {e}")
-            # Toast 失败时打印到 stderr，logcat 可查
-            sys.stderr.write(f"[trade-calculator] toast error: {e}\n")
+            from android.content import Intent
+            from android.net import Uri
+            from android.os import Build, Environment
 
-        # 调试信息写入文件
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            Intent = autoclass('android.content.Intent')
+            Uri = autoclass('android.net.Uri')
+
+            activity = PythonActivity.mActivity
+            package_name = activity.getPackageName()
+
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            file_name = f"trade_history_{timestamp}.csv"
+
+            # Android 10+ 用 MediaStore，< 10 用 Downloads 目录
+            if Build.VERSION.SDK_INT >= 29:
+                # MediaStore API
+                resolver = activity.getContentResolver()
+                ContentValues = autoclass('android.content.ContentValues')
+                values = ContentValues()
+                values.put("relative_path", "Download")
+                values.put("_display_name", file_name)
+                values.put("mime_type", "text/csv")
+
+                uri = resolver.insert(autoclass('android.provider.MediaStore$Downloads').EXTERNAL_CONTENT_URI, values)
+                error_log.append(f"MediaStore uri: {uri}")
+
+                with resolver.openOutputStream(uri) as out:
+                    with open(self.history_file, "rb") as src:
+                        shutil.copyfileobj(src, out)
+                error_log.append("MediaStore write ok")
+
+                share_uri = uri
+            else:
+                # Android 9 及以下直接写 Downloads
+                downloads_dir = Environment.getExternalStoragePublicDirectory("downloads").getAbsolutePath()
+                dest_path = os.path.join(downloads_dir, file_name)
+                shutil.copy(self.history_file, dest_path)
+                error_log.append(f"written to: {dest_path}")
+                share_uri = Uri.fromJNI(autoclass('android.net.Uri').parse(f"file://{dest_path}"))
+
+            # 3. 触发分享
+            @run_on_ui_thread
+            def do_share():
+                try:
+                    share_intent = Intent(Intent.ACTION_SEND)
+                    share_intent.setType("text/csv")
+                    share_intent.putExtra(Intent.EXTRA_STREAM, share_uri)
+                    share_intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    chooser = Intent.createChooser(share_intent, "分享交易记录")
+                    activity.startActivity(chooser)
+                    error_log.append("share intent started ok")
+                except Exception as e2:
+                    error_log.append(f"share intent FAILED: {e2}")
+
+            do_share()
+            self._show_toast(f"已导出 {history_count} 条记录，正在分享...", long_duration=True)
+            error_log.append("all done")
+
+        except Exception as e:
+            error_log.append(f"export FAILED: {e}")
+            error_log.append(traceback.format_exc())
+            # 回退：只保存到私有目录，让用户自己找
+            self._show_toast(f"文件已保存到:\n{self.history_file}", long_duration=True)
+
+        # 调试写入
         try:
             debug_file = os.path.join(os.path.dirname(self.history_file), "export_debug.log")
             with open(debug_file, "w", encoding="utf-8") as f:
