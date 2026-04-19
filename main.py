@@ -457,30 +457,50 @@ class TradeApp(BoxLayout):
         except:
             pass
 
-    # 菜单弹窗（Popup 版本，稳定）
+    # 菜单弹窗
     def show_menu(self, instance):
-        content = BoxLayout(orientation='vertical', spacing=12, padding=20)
-        export_btn = ExportBtn(size_hint=(1, 0.3))
-        clear_btn = ClearBtn(size_hint=(1, 0.3))
-        close_btn = CloseBtn(text="关闭", size_hint=(1, 0.3))
-        content.add_widget(export_btn)
-        content.add_widget(clear_btn)
-        content.add_widget(close_btn)
         popup = Popup(
             title="功能菜单",
-            title_font=FONT_NAME,
+            title_font="NotoSans",
             title_size="20sp",
             title_color=Style.text_white,
-            content=content,
             size_hint=(0.8, 0.6),
             background_color=Style.bg_main,
             separator_color=Style.line_blue,
             auto_dismiss=False
         )
-        export_btn.bind(on_press=lambda x: self._do_export())
-        clear_btn.bind(on_press=lambda x: self._do_clear())
-        close_btn.bind(on_press=lambda x, p=popup: p.dismiss())
+        content = BoxLayout(orientation='vertical', spacing=12, padding=20)
+        export_btn = ExportBtn(size_hint=(1, 0.3))
+        clear_btn = ClearBtn(size_hint=(1, 0.3))
+        close_btn = CloseBtn(text="关闭", size_hint=(1, 0.3))
+        export_btn.bind(on_press=lambda x: self.export_csv(popup))
+        clear_btn.bind(on_press=lambda x: self.clear_all_data(popup))
+        close_btn.bind(on_press=popup.dismiss)
+        content.add_widget(export_btn)
+        content.add_widget(clear_btn)
+        content.add_widget(close_btn)
+        popup.content = content
         popup.open()
+
+    def export_csv(self, popup):
+        """导出 CSV — 直接调用 _do_export（jnius + MediaStore 方式）"""
+        popup.dismiss()
+        self._do_export()
+
+    def clear_all_data(self, popup):
+        popup.dismiss()
+        self.trade_history = []
+        self.record_container.clear_widgets()
+        self.config = {"principal": "", "rate": "3"}
+        if os.path.exists(self.history_file):
+            os.remove(self.history_file)
+        if os.path.exists(self.config_file):
+            os.remove(self.config_file)
+        self.principal.text = ""
+        self.rate.text = "3"
+        self.symbol.text = ""
+        self.profit.text = ""
+        self.balance.text = ""
 
     # ---- Android Toast 工具 ----
     def _show_toast(self, msg, long_duration=False):
