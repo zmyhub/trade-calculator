@@ -500,13 +500,13 @@ class TradeApp(BoxLayout):
             print(f"[toast] {msg}")
 
     def _do_export(self):
-        """导出 CSV 到 Downloads 并触发分享"""
+        """导出 CSV 到手机文件管理器的 Download 文件夹"""
         import traceback, sys, time, shutil
 
         error_log = []
         history_count = len(self.trade_history)
 
-        # 1. 保存 CSV
+        # 1. 保存 CSV 到私有目录
         try:
             self.save_history()
             error_log.append(f"save_history ok: {history_count} records")
@@ -519,29 +519,28 @@ class TradeApp(BoxLayout):
             self._show_toast("无记录可导出", long_duration=True)
             return
 
-        error_log.append(f"source file: {self.history_file} size={os.path.getsize(self.history_file)}")
+        src_size = os.path.getsize(self.history_file)
+        error_log.append(f"source: {self.history_file} size={src_size}")
 
-        # 2. 复制到 Downloads 目录
+        # 2. 复制到 Download 文件夹
+        ok = False
+        dest_path = ""
         try:
             from jnius import autoclass, cast
             from android.runnable import run_on_ui_thread
-            from android.content import Intent
             from android.net import Uri
             from android.os import Build, Environment
 
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            Intent = autoclass('android.content.Intent')
             Uri = autoclass('android.net.Uri')
 
             activity = PythonActivity.mActivity
-            package_name = activity.getPackageName()
 
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             file_name = f"trade_history_{timestamp}.csv"
 
-            # Android 10+ 用 MediaStore，< 10 用 Downloads 目录
             if Build.VERSION.SDK_INT >= 29:
-                # MediaStore API
+                # Android 10+：用 MediaStore API
                 resolver = activity.getContentResolver()
                 ContentValues = autoclass('android.content.ContentValues')
                 values = ContentValues()
@@ -549,53 +548,48 @@ class TradeApp(BoxLayout):
                 values.put("_display_name", file_name)
                 values.put("mime_type", "text/csv")
 
-                uri = resolver.insert(autoclass('android.provider.MediaStore$Downloads').EXTERNAL_CONTENT_URI, values)
-                error_log.append(f"MediaStore uri: {uri}")
+                uri = resolver.insert(
+                    autoclass('android.provider.MediaStore$Downloads').EXTERNAL_CONTENT_URI,
+                    values
+                )
+                error_log.append(f"MediaStore uri created: {uri}")
 
                 with resolver.openOutputStream(uri) as out:
                     with open(self.history_file, "rb") as src:
                         shutil.copyfileobj(src, out)
-                error_log.append("MediaStore write ok")
+                error_log.append("MediaStore write done")
+                ok = True
 
-                share_uri = uri
             else:
-                # Android 9 及以下直接写 Downloads
+                # Android 9 及以下
                 downloads_dir = Environment.getExternalStoragePublicDirectory("downloads").getAbsolutePath()
                 dest_path = os.path.join(downloads_dir, file_name)
                 shutil.copy(self.history_file, dest_path)
                 error_log.append(f"written to: {dest_path}")
-                share_uri = Uri.fromJNI(autoclass('android.net.Uri').parse(f"file://{dest_path}"))
-
-            # 3. 触发分享
-            @run_on_ui_thread
-            def do_share():
-                try:
-                    share_intent = Intent(Intent.ACTION_SEND)
-                    share_intent.setType("text/csv")
-                    share_intent.putExtra(Intent.EXTRA_STREAM, share_uri)
-                    share_intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    chooser = Intent.createChooser(share_intent, "分享交易记录")
-                    activity.startActivity(chooser)
-                    error_log.append("share intent started ok")
-                except Exception as e2:
-                    error_log.append(f"share intent FAILED: {e2}")
-
-            do_share()
-            self._show_toast(f"已导出 {history_count} 条记录，正在分享...", long_duration=True)
-            error_log.append("all done")
+                ok = True
 
         except Exception as e:
-            error_log.append(f"export FAILED: {e}")
+            error_log.append(f"Download write FAILED: {e}")
             error_log.append(traceback.format_exc())
-            # 回退：只保存到私有目录，让用户自己找
-            self._show_toast(f"文件已保存到:\n{self.history_file}", long_duration=True)
 
-        # 调试写入
+        # 3. 反馈结果
+        if ok:
+            self._show_toast(f"已导出 {history_count} 条记录\n打开文件管理器 - Download 文件夹查看", long_duration=True)
+        else:
+            # 回退：复制到 app 私有目录（用户可通过 ES 文件浏览器找到）
+            try:
+                fallback = "/sdcard/trade_history_export.csv"
+                shutil.copy(self.history_file, fallback)
+                self._show_toast(f"导出失败，已保存到:\n{fallback}", long_duration=True)
+            except Exception:
+                self._show_toast("导出失败，请重试", long_duration=True)
+
+        # 调试信息写入文件
         try:
-            debug_file = os.path.join(os.path.dirname(self.history_file), "export_debug.log")
+            debug_file = "/sdcard/export_debug.log"
             with open(debug_file, "w", encoding="utf-8") as f:
                 f.write("\n".join(error_log))
-        except:
+        except Exception:
             pass
 
     def _dismiss_toast(self, *l):
