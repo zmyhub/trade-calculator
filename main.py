@@ -483,9 +483,37 @@ class TradeApp(BoxLayout):
         popup.open()
 
     def export_csv(self, popup):
-        """导出 CSV — 通过 MediaStore API 写到 Download 文件夹（用户可见）"""
+        """导出 CSV — 用 Context.getExternalFilesDir 写到 Downloads（用户可见）"""
+        import traceback, time
         popup.dismiss()
-        self._do_export()
+        try:
+            # 1. 先确保历史记录写到 app 私有目录
+            self.save_history()
+            if not os.path.exists(self.history_file):
+                self._show_toast("无记录可导出", long_duration=True)
+                return
+            # 2. 用 Android Context 获取 Downloads 目录路径
+            from jnius import autoclass
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            ctx = PythonActivity.mActivity
+            download_dir = ctx.getExternalFilesDir(None)  # /storage/emulated/0/Android/data/org.tradeapp.trade_calculator/files
+            if download_dir is None:
+                raise RuntimeError("无法获取Downloads目录")
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            dest_name = f"trade_history_{timestamp}.csv"
+            dest_path = os.path.join(download_dir.getAbsolutePath(), dest_name)
+            # 3. 复制文件
+            import shutil
+            shutil.copy(self.history_file, dest_path)
+            self._show_toast(f"已导出:\n{dest_name}\n\n可在文件管理中找到", long_duration=True)
+        except Exception as e:
+            err = traceback.format_exc()
+            try:
+                with open("/data/local/tmp/export_err.log", "w", encoding="utf-8") as f:
+                    f.write(err)
+            except:
+                pass
+            self._show_toast(f"导出失败: {e}", long_duration=True)
 
     def clear_all_data(self, popup):
         popup.dismiss()
