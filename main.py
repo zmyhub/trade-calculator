@@ -476,7 +476,7 @@ class TradeApp(BoxLayout):
             separator_color=Style.line_blue,
             auto_dismiss=False
         )
-        export_btn.bind(on_press=lambda x: self._do_export())
+        export_btn.bind(on_press=lambda x: self._debug_export())
         clear_btn.bind(on_press=lambda x: self._do_clear())
         close_btn.bind(on_press=lambda x, p=popup: p.dismiss())
         popup.open()
@@ -499,8 +499,28 @@ class TradeApp(BoxLayout):
             # 非 Android 平台降级到打印
             print(f"[toast] {msg}")
 
+    def _debug_export(self):
+        """带调试日志的导出（完成后替换回_do_export）"""
+        import traceback, time
+        debug_file = os.path.join(os.path.dirname(self.history_file), "export_debug.log")
+        try:
+            with open(debug_file, "w", encoding="utf-8") as f:
+                f.write(f"[{time.strftime('%H:%M:%S')}] _debug_export called\n")
+                f.write(f"trade_history count: {len(self.trade_history)}\n")
+                f.write(f"history_file: {getattr(self, 'history_file', 'NOT SET')}\n")
+        except:
+            pass
+        try:
+            self._do_export()
+        except Exception as e:
+            try:
+                with open(debug_file, "a", encoding="utf-8") as f:
+                    f.write(f"EXCEPTION: {e}\n{traceback.format_exc()}\n")
+            except:
+                pass
+
     def _do_export(self):
-        """导出 CSV 到手机文件管理器的 Download 文件夹"""
+        """导出 CSV 到 Downloads 并触发分享"""
         import traceback, sys, time, shutil
 
         error_log = []
