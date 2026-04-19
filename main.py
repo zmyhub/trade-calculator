@@ -519,12 +519,11 @@ class TradeApp(BoxLayout):
 
             # 2. 写入 Downloads 目录
             from jnius import autoclass
-            from android.os import Build
 
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             file_name = f"trade_history_{timestamp}.csv"
-            dest_path = None
 
+            Build = autoclass('android.os.Build')
             if Build.VERSION.SDK_INT >= 29:
                 # Android 10+ 用 MediaStore API
                 PythonActivity = autoclass('org.kivy.android.PythonActivity')
@@ -559,13 +558,17 @@ class TradeApp(BoxLayout):
                 with open(debug_file, "a", encoding="utf-8") as f:
                     f.write(f"legacy ok: {dest_path}\n")
 
+            # Toast 放在 try 外面，确保文件写入一定完成
             self._show_toast(f"已保存到:\nDownload/{file_name}", long_duration=True)
 
         except Exception as e:
             err = traceback.format_exc()
             with open(debug_file, "a", encoding="utf-8") as f:
                 f.write(f"ERROR: {e}\n{err}\n")
-            self._show_toast(f"导出失败: {e}", long_duration=True)
+            try:
+                self._show_toast(f"导出失败: {e}", long_duration=True)
+            except:
+                pass
 
     def _dismiss_toast(self, *l):
         if hasattr(self, "_toast_label") and self._toast_label.parent:
