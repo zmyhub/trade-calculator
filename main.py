@@ -476,7 +476,7 @@ class TradeApp(BoxLayout):
             separator_color=Style.line_blue,
             auto_dismiss=False
         )
-        export_btn.bind(on_press=lambda x: self._debug_export())
+        export_btn.bind(on_press=lambda x: self._do_export())
         clear_btn.bind(on_press=lambda x: self._do_clear())
         close_btn.bind(on_press=lambda x, p=popup: p.dismiss())
         popup.open()
@@ -499,70 +499,39 @@ class TradeApp(BoxLayout):
             # 非 Android 平台降级到打印
             print(f"[toast] {msg}")
 
-    def _debug_export(self):
-        """带调试日志的导出（完成后替换回_do_export）"""
-        import traceback, time
-        debug_file = os.path.join(os.path.dirname(self.history_file), "export_debug.log")
-        try:
-            with open(debug_file, "w", encoding="utf-8") as f:
-                f.write(f"[{time.strftime('%H:%M:%S')}] _debug_export called\n")
-                f.write(f"trade_history count: {len(self.trade_history)}\n")
-                f.write(f"history_file: {getattr(self, 'history_file', 'NOT SET')}\n")
-        except:
-            pass
-        try:
-            self._do_export()
-        except Exception as e:
-            try:
-                with open(debug_file, "a", encoding="utf-8") as f:
-                    f.write(f"EXCEPTION: {e}\n{traceback.format_exc()}\n")
-            except:
-                pass
-
     def _do_export(self):
-        """导出 CSV 到 Downloads 并触发分享"""
-        import traceback, sys, time, shutil
+        """导出 CSV 到手机 Download 文件夹"""
+        import traceback, time, shutil
+        debug_file = os.path.join(os.path.dirname(self.history_file), "export_debug.log")
 
-        error_log = []
-        history_count = len(self.trade_history)
-
-        # 1. 保存 CSV 到私有目录
         try:
+            # 1. 先保存 CSV
             self.save_history()
-            error_log.append(f"save_history ok: {history_count} records")
-        except Exception as e:
-            error_log.append(f"save_history FAILED: {e}")
-            self._show_toast(f"保存失败: {e}", long_duration=True)
-            return
+            history_count = len(self.trade_history)
 
-        if not os.path.exists(self.history_file) or history_count == 0:
-            self._show_toast("无记录可导出", long_duration=True)
-            return
+            with open(debug_file, "w", encoding="utf-8") as f:
+                f.write(f"[{time.strftime('%H:%M:%S')}] export start, records={history_count}\n")
+                f.write(f"source: {self.history_file}\n")
 
-        src_size = os.path.getsize(self.history_file)
-        error_log.append(f"source: {self.history_file} size={src_size}")
+            if history_count == 0:
+                self._show_toast("无记录可导出", long_duration=True)
+                return
 
-        # 2. 复制到 Download 文件夹
-        ok = False
-        dest_path = ""
-        try:
-            from jnius import autoclass, cast
-            from android.runnable import run_on_ui_thread
-            from android.net import Uri
-            from android.os import Build, Environment
-
-            PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            Uri = autoclass('android.net.Uri')
-
-            activity = PythonActivity.mActivity
+            # 2. 写入 Downloads 目录
+            from jnius import autoclass
+            from android.os import Build
 
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             file_name = f"trade_history_{timestamp}.csv"
+            dest_path = None
 
             if Build.VERSION.SDK_INT >= 29:
-                # Android 10+：用 MediaStore API
+                # Android 10+ 用 MediaStore API
+                PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                activity = PythonActivity.mActivity
                 resolver = activity.getContentResolver()
                 ContentValues = autoclass('android.content.ContentValues')
+
                 values = ContentValues()
                 values.put("relative_path", "Download")
                 values.put("_display_name", file_name)
@@ -572,45 +541,31 @@ class TradeApp(BoxLayout):
                     autoclass('android.provider.MediaStore$Downloads').EXTERNAL_CONTENT_URI,
                     values
                 )
-                error_log.append(f"MediaStore uri created: {uri}")
 
                 with resolver.openOutputStream(uri) as out:
                     with open(self.history_file, "rb") as src:
                         shutil.copyfileobj(src, out)
-                error_log.append("MediaStore write done")
-                ok = True
+
+                dest_path = f"Download/{file_name}"
+                with open(debug_file, "a", encoding="utf-8") as f:
+                    f.write(f"MediaStore ok: {dest_path}\n")
 
             else:
                 # Android 9 及以下
+                Environment = autoclass('android.os.Environment')
                 downloads_dir = Environment.getExternalStoragePublicDirectory("downloads").getAbsolutePath()
                 dest_path = os.path.join(downloads_dir, file_name)
                 shutil.copy(self.history_file, dest_path)
-                error_log.append(f"written to: {dest_path}")
-                ok = True
+                with open(debug_file, "a", encoding="utf-8") as f:
+                    f.write(f"legacy ok: {dest_path}\n")
+
+            self._show_toast(f"已保存到:\nDownload/{file_name}", long_duration=True)
 
         except Exception as e:
-            error_log.append(f"Download write FAILED: {e}")
-            error_log.append(traceback.format_exc())
-
-        # 3. 反馈结果
-        if ok:
-            self._show_toast(f"已导出 {history_count} 条记录\n打开文件管理器 - Download 文件夹查看", long_duration=True)
-        else:
-            # 回退：复制到 app 私有目录（用户可通过 ES 文件浏览器找到）
-            try:
-                fallback = "/sdcard/trade_history_export.csv"
-                shutil.copy(self.history_file, fallback)
-                self._show_toast(f"导出失败，已保存到:\n{fallback}", long_duration=True)
-            except Exception:
-                self._show_toast("导出失败，请重试", long_duration=True)
-
-        # 调试信息写入文件
-        try:
-            debug_file = "/sdcard/export_debug.log"
-            with open(debug_file, "w", encoding="utf-8") as f:
-                f.write("\n".join(error_log))
-        except Exception:
-            pass
+            err = traceback.format_exc()
+            with open(debug_file, "a", encoding="utf-8") as f:
+                f.write(f"ERROR: {e}\n{err}\n")
+            self._show_toast(f"导出失败: {e}", long_duration=True)
 
     def _dismiss_toast(self, *l):
         if hasattr(self, "_toast_label") and self._toast_label.parent:
