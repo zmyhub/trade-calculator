@@ -12,7 +12,7 @@ android.icon.filename = %(source.dir)s/icons/icon.png
 
 version = 1.0.0
 
-requirements = python3,kivy==2.2.0
+requirements = python3,kivy==2.2.0,android
 
 orientation = portrait
 
